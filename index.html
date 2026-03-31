@@ -1,4 +1,4 @@
-　<!DOCTYPE html>
+<!DOCTYPE html>
 
 <html lang="ja">
 <head>
@@ -396,10 +396,6 @@ main{margin-left:0!important;padding-bottom:68px;}
 </style>
 compat SDK –>
 
-<script src="https://cdn.jsdelivr.net/npm/firebase@9.23.0/firebase-app-compat.js"></script>
-
-<script src="https://cdn.jsdelivr.net/npm/firebase@9.23.0/firebase-firestore-compat.js"></script>
-
 </head>
 <body>
 <div class="app">
@@ -425,7 +421,6 @@ compat SDK –>
   </nav>
   <div class="side-footer">
     <div id="sideDate" style="color:var(--ash);"></div>
-    <div id="syncStatus" style="margin-top:4px;font-size:9px;">同期中…</div>
     <div style="margin-top:2px;">BLACK ANT © 2025</div>
   </div>
 </aside>
@@ -441,7 +436,6 @@ compat SDK –>
     <div class="ph-left">
       <h2>Dashboard</h2>
       <div class="ph-sub" id="dashDate"></div>
-      <div id="syncStatus" style="font-size:9px;color:var(--green2);letter-spacing:.1em;margin-top:2px;">同期中…</div>
     </div>
     <div class="ph-right">
       <button class="btn btn-gold" onclick="go('daily')">本日の在庫更新 →</button>
@@ -671,121 +665,6 @@ compat SDK –>
 <div id="toast"></div>
 
 <script>
-/* ━━ FIREBASE ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
-const firebaseConfig = {
-  apiKey: "AIzaSyARrN4QWFK2aiwURsLT8--Ep0VjxuLnGr8",
-  authDomain: "black-ant-80484.firebaseapp.com",
-  projectId: "black-ant-80484",
-  storageBucket: "black-ant-80484.firebasestorage.app",
-  messagingSenderId: "709964093839",
-  appId: "1:709964093839:web:7e1756e6bb9b39a9b513fa"
-};
-let fsdb = null;
-function initFirebase() {
-  try {
-    if (typeof firebase === 'undefined') {
-      console.warn('Firebase SDK not loaded');
-      return false;
-    }
-    if (!firebase.apps.length) {
-      firebase.initializeApp(firebaseConfig);
-    }
-    fsdb = firebase.firestore();
-    return true;
-  } catch(e) {
-    console.error('Firebase init error:', e);
-    return false;
-  }
-}
-
-// Firestoreへの保存（写真はlocalStorageのまま）
-async function saveToCloud() {
-  if (!fsdb) return;
-  try {
-    const prods = db.products.map(p => {
-      const {photo, ...rest} = p;
-      return rest;
-    });
-    await fsdb.collection('blackant').doc('products').set({ list: prods, nextId: db.nextId });
-    await fsdb.collection('blackant').doc('logs').set({ list: db.logs, nextLogId: db.nextLogId });
-    showSyncStatus('ok');
-  } catch(e) {
-    console.error('Cloud save error:', e);
-    showSyncStatus('error');
-  }
-}
-
-// Firestoreからの読み込み
-async function loadFromCloud() {
-  if (!fsdb) {
-    showSyncStatus('error');
-    return;
-  }
-  try {
-    showSyncStatus('loading');
-    const prodDoc = await fsdb.collection('blackant').doc('products').get();
-    const logDoc  = await fsdb.collection('blackant').doc('logs').get();
-    if (prodDoc.exists) {
-      const data = prodDoc.data();
-      const localPhotos = {};
-      try {
-        const lp = localStorage.getItem('blackant_photos');
-        if(lp) Object.assign(localPhotos, JSON.parse(lp));
-      } catch(e){}
-      db.products = data.list.map(p => ({ ...p, photo: localPhotos[p.id] || null }));
-      db.nextId = data.nextId || 400;
-    }
-    if (logDoc.exists) {
-      const data = logDoc.data();
-      db.logs = data.list || [];
-      db.nextLogId = data.nextLogId || 1;
-    }
-    showSyncStatus('ok');
-    renderAll();
-  } catch(e) {
-    console.error('Cloud load error:', e);
-    showSyncStatus('error');
-  }
-}
-
-// リアルタイム同期リスナー（他デバイスの更新を受信）
-function startRealtimeSync() {
-  if (!fsdb) return;
-  fsdb.collection('blackant').doc('products').onSnapshot(snap => {
-    if (!snap.exists) return;
-    const data = snap.data();
-    const localPhotos = {};
-    try {
-      const lp = localStorage.getItem('blackant_photos');
-      if(lp) Object.assign(localPhotos, JSON.parse(lp));
-    } catch(e){}
-    db.products = data.list.map(p => ({ ...p, photo: localPhotos[p.id] || null }));
-    db.nextId = data.nextId || 400;
-    renderAll();
-    showSyncStatus('ok');
-  });
-  fsdb.collection('blackant').doc('logs').onSnapshot(snap => {
-    if (!snap.exists) return;
-    const data = snap.data();
-    db.logs = data.list || [];
-    db.nextLogId = data.nextLogId || 1;
-    renderAll();
-  });
-}
-
-function showSyncStatus(state) {
-  const el = document.getElementById('syncStatus');
-  if (!el) return;
-  const config = {
-    ok:      { text: '同期済み', color: 'var(--green2)' },
-    loading: { text: '同期中…',  color: 'var(--gold)' },
-    error:   { text: '同期エラー', color: 'var(--red2)' },
-  };
-  const s = config[state] || config.ok;
-  el.textContent = s.text;
-  el.style.color = s.color;
-}
-
 /* ━━ STORE ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
 const SK = 'blackant_v5';
 let db = loadDB();
@@ -800,14 +679,7 @@ function loadDB() {
   };
 }
 function saveDB() {
-  // ローカル保存（写真含む）
   localStorage.setItem(SK, JSON.stringify(db));
-  // 写真だけ別キーに保存
-  const photos = {};
-  db.products.forEach(p => { if(p.photo) photos[p.id] = p.photo; });
-  localStorage.setItem('blackant_photos', JSON.stringify(photos));
-  // クラウド保存
-  saveToCloud();
 }
 
 function defaultProducts() {
@@ -1010,19 +882,8 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('histDate').value = todayStr();
   document.getElementById('repMonth').value = todayStr().slice(0,7);
 
-  // まずローカルデータで即表示
   if(db.logs.length === 0) seedLogs();
   renderAll();
-
-  // Firebase初期化してクラウド同期
-  const ok = initFirebase();
-  if (ok) {
-    loadFromCloud().then(() => {
-      startRealtimeSync();
-    });
-  } else {
-    showSyncStatus('error');
-  }
 });
 
 function seedLogs() {
