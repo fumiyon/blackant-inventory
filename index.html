@@ -577,7 +577,7 @@ main{margin-left:210px!important;padding-bottom:0;}
               <div class="field span2" id="consignInfo" style="display:none;">
                 <div style="background:#f6f5f2;border:1px solid #e6e4df;padding:10px 12px;font-size:11px;font-family:'DM Mono',monospace;color:#706d68;">
                   手数料（30%）: <span id="consignFee" style="color:#b83030;">¥0</span>　
-                  実収額: <span id="consignNet" style="color:#1e6840;">¥0</span>
+                  実収売上: <span id="consignNet" style="color:#1e6840;">¥0</span>　利益 = 実収売上 − 仕入原価
                 </div>
               </div>
               <div class="field span2">
@@ -1187,7 +1187,7 @@ function logHTML(l, showDel=false) {
   const p=gp(l.pid); if(!p) return '';
   const isOut=l.type==='out';
   const isAdj2 = l.type==='adj';
-  const displayPrice = isOut?(l.origPrice||l.price):l.cost;
+  const displayPrice = isOut?l.price:l.cost;
   const amount = isAdj2?0:l.qty*displayPrice;
   const profit = isOut?l.qty*(l.price-l.cost):null;
   const profitCol=profit>=0?'log-profit-pos':'log-profit-neg';
@@ -1623,12 +1623,12 @@ function renderReport() {
   // 委託・通常の分類
   const consignOuts = outs.filter(l=>l.saleType==='consign');
   const normalOuts  = outs.filter(l=>l.saleType!=='consign');
-  const consignSales = consignOuts.reduce((a,l)=>a+l.qty*(l.origPrice||l.price),0);
+  const consignSales = consignOuts.reduce((a,l)=>a+l.qty*l.price,0);
   const consignNet   = consignOuts.reduce((a,l)=>a+l.qty*l.price,0);
   const consignFee   = consignSales - consignNet;
 
   document.getElementById('repKpi').innerHTML=`
-    <div class="kpi"><div class="kpi-label">総売上（実収）</div><div class="kpi-val c-gold">${yen(totSales)}</div><div class="kpi-sub">期間合計</div></div>
+    <div class="kpi"><div class="kpi-label">総売上（手数料控除後）</div><div class="kpi-val c-gold">${yen(totSales)}</div><div class="kpi-sub">期間合計</div></div>
     <div class="kpi"><div class="kpi-label">粗利</div><div class="kpi-val ${totProfit>=0?'c-green':'c-red'}">${yen(totProfit)}</div><div class="kpi-sub">粗利率 ${pct(totProfit,totSales)}</div></div>
     <div class="kpi"><div class="kpi-label">委託手数料（30%）</div><div class="kpi-val c-red">${yen(consignFee)}</div><div class="kpi-sub">委託 ${consignOuts.reduce((a,l)=>a+l.qty,0)}点</div></div>
     <div class="kpi"><div class="kpi-label">販売点数</div><div class="kpi-val">${totQty}</div><div class="kpi-sub">通常${normalOuts.reduce((a,l)=>a+l.qty,0)} / 委託${consignOuts.reduce((a,l)=>a+l.qty,0)}</div></div>
