@@ -297,9 +297,9 @@ cursor:pointer;transition:all .15s;color:#a8a49e;
 
 /* ── Report rows ── */
 .rep-row{
-display:flex;align-items:center;gap:8px;
-padding:11px 14px;border-bottom:1px solid #e6e4df;font-size:11px;
-min-width:0;background:#ffffff;
+display:flex;align-items:center;gap:6px;
+padding:10px 12px;border-bottom:1px solid #e6e4df;font-size:11px;
+min-width:0;background:#ffffff;flex-wrap:wrap;
 }
 .rep-row:last-child{border-bottom:none;}
 .rep-rank{font-family:‘Cormorant Garamond’, Georgia, serif;font-size:18px;color:#d0cdc7;width:24px;flex-shrink:0;font-weight:300;}
@@ -569,7 +569,8 @@ main{margin-left:210px!important;padding-bottom:0;}
               <div class="field"><label>カラー</label><select id="outCl" onchange="onOutVariantChange()"></select></div>
               <div class="field"><label>販売種別</label>
                 <select id="outSaleType" onchange="onSaleTypeChange()">
-                  <option value="normal">通常販売</option>
+                  <option value="store">店舗販売</option>
+                  <option value="online">オンライン販売</option>
                   <option value="consign">委託販売（30%手数料）</option>
                 </select>
               </div>
@@ -712,6 +713,10 @@ main{margin-left:210px!important;padding-bottom:0;}
         <div class="card-head"><h3>日別 売上・利益</h3></div>
         <div id="repDaily" style="max-height:320px;overflow-y:auto;"></div>
       </div>
+    </div>
+    <div class="card">
+      <div class="card-head"><h3>チャネル別 売上・利益</h3></div>
+      <div id="repChannel"></div>
     </div>
     <div class="card">
       <div class="card-head"><h3>カテゴリ別 売上構成</h3></div>
@@ -1351,7 +1356,7 @@ function doOut() {
   const cl=document.getElementById('outCl').value;
   const qty=parseInt(document.getElementById('outQty').value)||1;
   const price=parseInt(document.getElementById('outPrice').value)||0;
-  const saleType=document.getElementById('outSaleType').value;
+  const saleType=document.getElementById('outSaleType').value; // store/online/consign
   const p=gp(pid); if(!p) return;
   const k=skey(sz,cl);
   const cur=p.stock[k]||0;
@@ -1650,11 +1655,14 @@ function renderReport() {
   const consignNet   = consignOuts.reduce((a,l)=>a+l.qty*l.price,0);
   const consignFee   = consignSales - consignNet;
 
+  const storeQty   = outs.filter(l=>!l.saleType||l.saleType==='store'||l.saleType==='normal').reduce((a,l)=>a+l.qty,0);
+  const onlineQty  = outs.filter(l=>l.saleType==='online').reduce((a,l)=>a+l.qty,0);
+  const consignQty = consignOuts.reduce((a,l)=>a+l.qty,0);
   document.getElementById('repKpi').innerHTML=`
-    <div class="kpi"><div class="kpi-label">総売上（手数料控除後）</div><div class="kpi-val c-gold">${yen(totSales)}</div><div class="kpi-sub">期間合計</div></div>
-    <div class="kpi"><div class="kpi-label">粗利</div><div class="kpi-val ${totProfit>=0?'c-green':'c-red'}">${yen(totProfit)}</div><div class="kpi-sub">粗利率 ${pct(totProfit,totSales)}</div></div>
-    <div class="kpi"><div class="kpi-label">委託手数料（30%）</div><div class="kpi-val c-red">${yen(consignFee)}</div><div class="kpi-sub">委託 ${consignOuts.reduce((a,l)=>a+l.qty,0)}点</div></div>
-    <div class="kpi"><div class="kpi-label">販売点数</div><div class="kpi-val">${totQty}</div><div class="kpi-sub">通常${normalOuts.reduce((a,l)=>a+l.qty,0)} / 委託${consignOuts.reduce((a,l)=>a+l.qty,0)}</div></div>
+    <div class="kpi"><div class="kpi-label">総売上（実収）</div><div class="kpi-val c-gold">${yen(totSales)}</div><div class="kpi-sub">粗利率 ${pct(totProfit,totSales)}</div></div>
+    <div class="kpi"><div class="kpi-label">粗利</div><div class="kpi-val ${totProfit>=0?'c-green':'c-red'}">${yen(totProfit)}</div><div class="kpi-sub">${totQty}点販売</div></div>
+    <div class="kpi"><div class="kpi-label">店舗 / オンライン</div><div class="kpi-val">${storeQty}<span style="font-size:14px;color:#a8a49e;"> / </span>${onlineQty}</div><div class="kpi-sub">点</div></div>
+    <div class="kpi"><div class="kpi-label">委託手数料（30%）</div><div class="kpi-val c-red">${yen(consignFee)}</div><div class="kpi-sub">委託 ${consignQty}点</div></div>
   `;
 
   const EMPTY='<div style="padding:20px;text-align:center;color:var(--dust);font-size:11px;">データなし</div>';
@@ -1688,6 +1696,38 @@ function renderReport() {
       <span class="rep-profit ${pr>=0?'pos':'neg'}">粗利 ${yen(pr)}</span>
       <span class="rep-meta">${pct(pr,v.sales)}</span>
       <span class="rep-sales">${yen(v.sales)}</span>
+    </div>`;
+  }).join('');
+
+  // チャネル別集計
+  const channels = {
+    store:   { label:'店舗販売',   qty:0, sales:0, profit:0 },
+    online:  { label:'オンライン', qty:0, sales:0, profit:0 },
+    consign: { label:'委託販売',   qty:0, sales:0, profit:0 },
+    normal:  { label:'店舗販売',   qty:0, sales:0, profit:0 }, // 旧データ互換
+  };
+  outs.forEach(l=>{
+    const ch = channels[l.saleType||'store'] || channels.store;
+    ch.qty    += l.qty;
+    ch.sales  += l.qty*l.price;
+    ch.profit += l.qty*(l.price-l.cost);
+  });
+  // store と normal をまとめる
+  channels.store.qty    += channels.normal.qty;
+  channels.store.sales  += channels.normal.sales;
+  channels.store.profit += channels.normal.profit;
+
+  const chEl = document.getElementById('repChannel');
+  const chList = ['store','online','consign'];
+  chEl.innerHTML = chList.map(k=>{
+    const ch = channels[k];
+    const pctStr = ch.sales>0 ? pct(ch.profit,ch.sales) : '—';
+    return `<div class="rep-row">
+      <span class="rep-name" style="font-weight:400;">${ch.label}</span>
+      <span class="rep-meta">${ch.qty}点</span>
+      <span class="rep-profit ${ch.profit>=0?'pos':'neg'}">粗利 ${yen(ch.profit)}</span>
+      <span class="rep-meta">${pctStr}</span>
+      <span class="rep-sales">${yen(ch.sales)}</span>
     </div>`;
   }).join('');
 
