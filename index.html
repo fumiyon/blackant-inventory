@@ -572,6 +572,7 @@ main{margin-left:210px!important;padding-bottom:0;}
                   <option value="store">店舗販売</option>
                   <option value="online">オンライン販売</option>
                   <option value="consign">委託販売（30%手数料）</option>
+                  <option value="provide">商品提供（原価のみ）</option>
                 </select>
               </div>
               <div class="field"><label>数量</label><input type="number" id="outQty" min="1" value="1"></div>
@@ -944,7 +945,7 @@ function defaultProducts() {
     make(65,'乗除パーカー','アパレル',['XL','XXL'],['ブラック','ホワイト'],19800,6000,2,{'XL|ブラック':0,'XXL|ブラック':0,'XL|ホワイト':-1,'XXL|ホワイト':0}),
     make(66,'Track pants（3色）','アパレル',['フリー'],['ブラックxL','グレーオレンジ','ブラック'],19800,5000,2,{'フリー|ブラックxL':3,'フリー|グレーオレンジ':0,'フリー|ブラック':0}),
     // ── グッズ ──
-    make(101,'3匠の戦士ステッカー','グッズ',['フリー'],['ー'],1000,240,5,122),
+    make(101,'三匠の戦士ステッカー','グッズ',['フリー'],['ー'],1000,240,5,122),
     make(102,'ステッカー6枚セット','グッズ',['フリー'],['ー'],3400,1440,5,10),
     make(103,'ラベルステッカー','グッズ',['フリー'],['ホワイト'],1000,231,10,77),
     make(104,'アクリルキーホルダー','グッズ',['フリー'],['ー'],700,250,10,290),
@@ -959,7 +960,7 @@ function defaultProducts() {
     make(113,'ぬいぐるみKH ブラックアンタくん','グッズ',['フリー'],['ー'],6600,2000,5,28),
     make(114,'ぬいぐるみKH 夢ずきんちゃん','グッズ',['フリー'],['ー'],6600,2000,5,33),
     make(115,'ぬいぐるみKH ラヴィロッタ','グッズ',['フリー'],['ー'],6600,2000,5,21),
-    make(116,'ぬいぐるみKH 3匠セット','グッズ',['フリー'],['ー'],19300,6000,3,-52),
+    make(116,'ぬいぐるみKH 三匠の戦士セット','グッズ',['フリー'],['ー'],19300,6000,3,21),
     make(117,'ぬいぐるみ大 アンタくん','グッズ',['フリー'],['ー'],330000,90000,1,0),
     make(118,'ぬいぐるみ大 夢ずきんちゃん','グッズ',['フリー'],['ー'],330000,90000,1,0),
     make(119,'ぬいぐるみ大 ラヴィロッタ','グッズ',['フリー'],['ー'],330000,90000,1,0),
@@ -1222,7 +1223,7 @@ function logHTML(l, showDel=false) {
   const isAdj = l.type==='adj';
   const isConsign = l.saleType==='consign';
   const delBtn=showDel?`<button class="btn btn-danger btn-sm" onclick="delLog(${l.id})" style="padding:2px 9px;font-size:9px;">削除</button>`:'';
-  const typeLabel = isAdj?'調整':isOut?'出庫':'入庫';
+  const typeLabel = isAdj?'調整':isOut?(l.saleType==='provide'?'提供':'出庫'):'入庫';
   const typeClass = isAdj?'log-type-adj':isOut?'log-type-out':'log-type-in';
   return `<div class="log-item">
     <div class="log-top">
@@ -1299,7 +1300,16 @@ function onOutVariantChange(){
 function onSaleTypeChange(){
   const t = document.getElementById('outSaleType').value;
   const infoEl = document.getElementById('consignInfo');
-  infoEl.style.display = t==='consign' ? 'block' : 'none';
+  infoEl.style.display = (t==='consign'||t==='provide') ? 'block' : 'none';
+  // 商品提供の場合は販売単価を0に自動設定
+  if(t==='provide'){
+    document.getElementById('outPrice').value = 0;
+    document.getElementById('consignFee').textContent = '—';
+    document.getElementById('consignNet').textContent = '¥0（原価のみ減算）';
+  } else {
+    const p=gp(parseInt(document.getElementById('outProd').value));
+    if(p && t!=='consign') document.getElementById('outPrice').value = p.price;
+  }
   onOutPriceInput();
 }
 
@@ -1362,13 +1372,28 @@ function doOut() {
   const cur=p.stock[k]||0;
   if(cur<=0){ toast(`在庫なし: ${p.name} ${sz}/${cl}`,true); return; }
   if(cur < qty){ toast(`在庫不足: ${p.name} ${sz}/${cl} (在庫${cur}点)`,true); return; }
-  // 委託の場合は実収額（70%）をpriceとして記録
-  const actualPrice = saleType==='consign' ? Math.round(price*0.7) : price;
+  // 販売種別による価格計算
+  // 委託: 実収70% / 商品提供: 売上0（原価のみ）/ その他: そのまま
+  const actualPrice = saleType==='consign' ? Math.round(price*0.7) : saleType==='provide' ? 0 : price;
   p.stock[k]=cur-qty;
   db.logs.push({id:db.nextLogId++,type:'out',date,pid,sz,cl,qty,price:actualPrice,cost:p.cost,saleType,origPrice:price});
+
+  // ぬいぐるみ3匠セット（id=116）が売れたら113・114・115の在庫も連動して減らす
+  if(pid === 116) {
+    const linkedIds = [113, 114, 115]; // アンタくん・夢ずきん・ラヴィロッタ
+    linkedIds.forEach(lid => {
+      const lp = gp(lid);
+      if(lp) {
+        const lk = skey('フリー','ー');
+        lp.stock[lk] = (lp.stock[lk]||0) - qty;
+      }
+    });
+  }
+
   saveDB();
-  const typeLabel = saleType==='consign'?'（委託）':'';
-  toast(`✓ 出庫${typeLabel}: ${p.name} ${sz}/${cl} × ${qty}`);
+  const typeLabels = {consign:'（委託）', provide:'（商品提供）', online:'（オンライン）', store:''};
+  const typeLabel = typeLabels[saleType]||'';
+  toast(`✓ 出庫${typeLabel}: ${p.name} ${sz}/${cl} × ${qty}${pid===116?' (三匠連動)':''}` );
   document.getElementById('histDate').value=date;
   onOutVariantChange();
   renderAll();
@@ -1704,6 +1729,7 @@ function renderReport() {
     store:   { label:'店舗販売',   qty:0, sales:0, profit:0 },
     online:  { label:'オンライン', qty:0, sales:0, profit:0 },
     consign: { label:'委託販売',   qty:0, sales:0, profit:0 },
+    provide: { label:'商品提供',   qty:0, sales:0, profit:0 },
     normal:  { label:'店舗販売',   qty:0, sales:0, profit:0 }, // 旧データ互換
   };
   outs.forEach(l=>{
@@ -1718,7 +1744,7 @@ function renderReport() {
   channels.store.profit += channels.normal.profit;
 
   const chEl = document.getElementById('repChannel');
-  const chList = ['store','online','consign'];
+  const chList = ['store','online','consign','provide'];
   chEl.innerHTML = chList.map(k=>{
     const ch = channels[k];
     const pctStr = ch.sales>0 ? pct(ch.profit,ch.sales) : '—';
