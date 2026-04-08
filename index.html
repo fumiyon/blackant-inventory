@@ -756,7 +756,7 @@ main{margin-left:210px!important;padding-bottom:0;}
       </div>
       <button class="photo-rm" id="photoRm" onclick="removePhoto(event)" type="button">削除</button>
     </label>
-    <input type="file" id="photoFile" accept="image/*" style="position:absolute;width:1px;height:1px;opacity:0;pointer-events:none;" onchange="onPhotoChange(event)">
+    <input type="file" id="photoFile" accept="image/*" style="position:absolute;width:0;height:0;opacity:0;" onchange="onPhotoChange(event)">
     <div class="form-grid">
       <div class="field span2"><label>商品名</label><input id="pName" placeholder="例: オーバーサイズTシャツ"></div>
       <div class="field"><label>カテゴリ</label><input id="pCat" list="catDL" placeholder="例: アパレル"></div>
@@ -849,7 +849,21 @@ const SK = 'blackant_v5';
 let db = loadDB();
 
 function loadDB() {
-  try { const d = localStorage.getItem(SK); if(d) return JSON.parse(d); } catch(e){}
+  try {
+    const d = localStorage.getItem(SK);
+    if(d) {
+      const parsed = JSON.parse(d);
+      // 写真を復元
+      try {
+        const lp = localStorage.getItem('blackant_photos');
+        if(lp) {
+          const photos = JSON.parse(lp);
+          parsed.products = parsed.products.map(p=>({...p, photo: photos[p.id]||null}));
+        }
+      } catch(e){}
+      return parsed;
+    }
+  } catch(e){}
   return {
     products: defaultProducts(),
     logs: [],
@@ -858,10 +872,22 @@ function loadDB() {
   };
 }
 function saveDB() {
-  localStorage.setItem(SK, JSON.stringify(db));
-  const photos = {};
-  db.products.forEach(p => { if(p.photo) photos[p.id] = p.photo; });
-  localStorage.setItem('blackant_photos', JSON.stringify(photos));
+  try {
+    // 写真を除いたデータを保存
+    const dbNoPhoto = {...db, products: db.products.map(p=>({...p,photo:null}))};
+    localStorage.setItem(SK, JSON.stringify(dbNoPhoto));
+    // 写真は別途保存
+    const photos = {};
+    db.products.forEach(p => { if(p.photo) photos[p.id] = p.photo; });
+    try {
+      localStorage.setItem('blackant_photos', JSON.stringify(photos));
+    } catch(e) {
+      console.warn('写真保存容量オーバー:', e);
+      toast('写真の保存に失敗しました（容量不足）', true);
+    }
+  } catch(e) {
+    console.error('saveDB error:', e);
+  }
   saveToCloud();
 }
 
@@ -1651,12 +1677,30 @@ function setPhotoUI(src) {
 }
 function onPhotoChange(e) {
   const file=e.target.files[0]; if(!file) return;
-  const reader=new FileReader();
-  reader.onload=function(ev){
-    photoData=ev.target.result;
+  const url=URL.createObjectURL(file);
+  const img=new Image();
+  img.onload=function(){
+    // 最大300pxにリサイズして圧縮（localStorage節約）
+    const MAX=300;
+    let w=img.width, h=img.height;
+    if(w>h){ if(w>MAX){h=Math.round(h*MAX/w);w=MAX;} }
+    else    { if(h>MAX){w=Math.round(w*MAX/h);h=MAX;} }
+    const cv=document.createElement('canvas');
+    cv.width=w; cv.height=h;
+    cv.getContext('2d').drawImage(img,0,0,w,h);
+    photoData=cv.toDataURL('image/jpeg',0.6);
+    URL.revokeObjectURL(url);
     setPhotoUI(photoData);
+    toast('✓ 写真を追加しました');
   };
-  reader.readAsDataURL(file);
+  img.onerror=function(){
+    URL.revokeObjectURL(url);
+    // Canvas失敗時はFileReaderにフォールバック
+    const reader=new FileReader();
+    reader.onload=function(ev){ photoData=ev.target.result; setPhotoUI(photoData); };
+    reader.readAsDataURL(file);
+  };
+  img.src=url;
 }
 function removePhoto(e) {
   e.stopPropagation();
