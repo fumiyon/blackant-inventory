@@ -572,6 +572,7 @@ main{margin-left:210px!important;padding-bottom:0;}
                   <option value="store">店舗販売</option>
                   <option value="online">オンライン販売</option>
                   <option value="consign">委託販売（30%手数料）</option>
+                  <option value="consign20">委託販売（20%手数料）</option>
                   <option value="provide">商品提供（原価のみ）</option>
                 </select>
               </div>
@@ -1326,7 +1327,7 @@ function onOutVariantChange(){
 function onSaleTypeChange(){
   const t = document.getElementById('outSaleType').value;
   const infoEl = document.getElementById('consignInfo');
-  infoEl.style.display = (t==='consign'||t==='provide') ? 'block' : 'none';
+  infoEl.style.display = (t==='consign'||t==='consign20'||t==='provide') ? 'block' : 'none';
   // 商品提供の場合は販売単価を0に自動設定
   if(t==='provide'){
     document.getElementById('outPrice').value = 0;
@@ -1341,9 +1342,10 @@ function onSaleTypeChange(){
 
 function onOutPriceInput(){
   const t = document.getElementById('outSaleType').value;
-  if(t!=='consign') return;
+  if(t!=='consign' && t!=='consign20') return;
   const price = parseInt(document.getElementById('outPrice').value)||0;
-  const fee = Math.round(price*0.3);
+  const rate = t==='consign20' ? 0.2 : 0.3;
+  const fee = Math.round(price*rate);
   const net = price - fee;
   document.getElementById('consignFee').textContent = yen(fee);
   document.getElementById('consignNet').textContent = yen(net);
@@ -1400,7 +1402,7 @@ function doOut() {
   if(cur < qty){ toast(`在庫不足: ${p.name} ${sz}/${cl} (在庫${cur}点)`,true); return; }
   // 販売種別による価格計算
   // 委託: 実収70% / 商品提供: 売上0（原価のみ）/ その他: そのまま
-  const actualPrice = saleType==='consign' ? Math.round(price*0.7) : saleType==='provide' ? 0 : price;
+  const actualPrice = saleType==='consign' ? Math.round(price*0.7) : saleType==='consign20' ? Math.round(price*0.8) : saleType==='provide' ? 0 : price;
   p.stock[k]=cur-qty;
   db.logs.push({id:db.nextLogId++,type:'out',date,pid,sz,cl,qty,price:actualPrice,cost:p.cost,saleType,origPrice:price});
 
@@ -1417,7 +1419,7 @@ function doOut() {
   }
 
   saveDB();
-  const typeLabels = {consign:'（委託）', provide:'（商品提供）', online:'（オンライン）', store:''};
+  const typeLabels = {consign:'（委託30%）', consign20:'（委託20%）', provide:'（商品提供）', online:'（オンライン）', store:''};
   const typeLabel = typeLabels[saleType]||'';
   toast(`✓ 出庫${typeLabel}: ${p.name} ${sz}/${cl} × ${qty}${pid===116?' (三匠連動)':''}` );
   document.getElementById('histDate').value=date;
@@ -1718,7 +1720,7 @@ function renderReport() {
   const totQty   =outs.reduce((a,l)=>a+l.qty,0);
 
   // 委託・通常の分類
-  const consignOuts = outs.filter(l=>l.saleType==='consign');
+  const consignOuts = outs.filter(l=>l.saleType==='consign'||l.saleType==='consign20');
   const normalOuts  = outs.filter(l=>l.saleType!=='consign');
   const consignSales = consignOuts.reduce((a,l)=>a+l.qty*l.price,0);
   const consignNet   = consignOuts.reduce((a,l)=>a+l.qty*l.price,0);
@@ -1770,11 +1772,12 @@ function renderReport() {
 
   // チャネル別集計
   const channels = {
-    store:   { label:'店舗販売',   qty:0, sales:0, profit:0 },
-    online:  { label:'オンライン', qty:0, sales:0, profit:0 },
-    consign: { label:'委託販売',   qty:0, sales:0, profit:0 },
-    provide: { label:'商品提供',   qty:0, sales:0, profit:0 },
-    normal:  { label:'店舗販売',   qty:0, sales:0, profit:0 }, // 旧データ互換
+    store:    { label:'店舗販売',        qty:0, sales:0, profit:0 },
+    online:   { label:'オンライン',      qty:0, sales:0, profit:0 },
+    consign:  { label:'委託販売（30%）', qty:0, sales:0, profit:0 },
+    consign20:{ label:'委託販売（20%）', qty:0, sales:0, profit:0 },
+    provide:  { label:'商品提供',        qty:0, sales:0, profit:0 },
+    normal:   { label:'店舗販売',        qty:0, sales:0, profit:0 },
   };
   outs.forEach(l=>{
     const ch = channels[l.saleType||'store'] || channels.store;
@@ -1788,7 +1791,7 @@ function renderReport() {
   channels.store.profit += channels.normal.profit;
 
   const chEl = document.getElementById('repChannel');
-  const chList = ['store','online','consign','provide'];
+  const chList = ['store','online','consign','consign20','provide'];
   chEl.innerHTML = chList.map(k=>{
     const ch = channels[k];
     const pctStr = ch.sales>0 ? pct(ch.profit,ch.sales) : '—';
