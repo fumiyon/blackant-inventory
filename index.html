@@ -1798,11 +1798,21 @@ function renderReport() {
   const onlineProfit = onlineOuts.reduce((a,l)=>a+l.qty*(l.price-l.cost),0);
   const consignQty = consignOuts.reduce((a,l)=>a+l.qty,0);
 
+  // 委託合計（30%+20%）
+  const allConsignOuts = outs.filter(l=>l.saleType==='consign'||l.saleType==='consign20');
+  const consignSalesGross = allConsignOuts.reduce((a,l)=>a+l.qty*(l.origPrice||l.price),0);
+  const consignSalesNet   = allConsignOuts.reduce((a,l)=>a+l.qty*l.price,0);
+  const consignTotalFee   = consignSalesGross - consignSalesNet;
+  const consignTotalQty   = allConsignOuts.reduce((a,l)=>a+l.qty,0);
+  const consignProfit     = allConsignOuts.reduce((a,l)=>a+l.qty*(l.price-l.cost),0);
+
   document.getElementById('repKpi').innerHTML=`
     <div class="kpi"><div class="kpi-label">総売上（実収）</div><div class="kpi-val c-gold">${yen(totSales)}</div><div class="kpi-sub">粗利率 ${pct(totProfit,totSales)}</div></div>
     <div class="kpi"><div class="kpi-label">総粗利</div><div class="kpi-val ${totProfit>=0?'c-green':'c-red'}">${yen(totProfit)}</div><div class="kpi-sub">${totQty}点販売</div></div>
     <div class="kpi"><div class="kpi-label">店舗 売上 / 粗利</div><div class="kpi-val">${yen(storeSales)}</div><div class="kpi-sub">${storeQty}点　粗利 ${yen(storeProfit)}</div></div>
     <div class="kpi"><div class="kpi-label">オンライン 売上 / 粗利</div><div class="kpi-val">${yen(onlineSales)}</div><div class="kpi-sub">${onlineQty}点　粗利 ${yen(onlineProfit)}</div></div>
+    <div class="kpi"><div class="kpi-label">委託 売上（実収）/ 粗利</div><div class="kpi-val">${yen(consignSalesNet)}</div><div class="kpi-sub">${consignTotalQty}点　粗利 ${yen(consignProfit)}</div></div>
+    <div class="kpi"><div class="kpi-label">委託 手数料合計</div><div class="kpi-val c-red">${yen(consignTotalFee)}</div><div class="kpi-sub">定価ベース ${yen(consignSalesGross)}</div></div>
   `;
 
   const EMPTY='<div style="padding:20px;text-align:center;color:var(--dust);font-size:11px;">データなし</div>';
