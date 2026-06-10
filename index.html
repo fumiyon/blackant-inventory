@@ -1300,11 +1300,16 @@ function logHTML(l, showDel=false) {
   const isConsign = l.saleType==='consign' || l.saleType==='consign20';
   const consignLabel = l.saleType==='consign20' ? '委託20%' : '委託30%';
   const delBtn=showDel?`<button class="btn btn-danger btn-sm" onclick="delLog(${l.id})" style="padding:2px 9px;font-size:9px;">削除</button>`:'';
-  const typeLabel = isAdj?'調整':isOut?(l.saleType==='provide'?'提供':'出庫'):'入庫';
+  const saleLabels = {
+    store:'店舗', online:'オンライン', consign:'委託30%', consign20:'委託20%',
+    provide:'提供', normal:'店舗', '':'店舗'
+  };
+  const channelLabel = isOut ? (saleLabels[l.saleType||'store']||'店舗') : '';
+  const typeLabel = isAdj?'調整':isOut?'出庫':'入庫';
   const typeClass = isAdj?'log-type-adj':isOut?'log-type-out':'log-type-in';
   return `<div class="log-item">
     <div class="log-top">
-      <span class="${typeClass}">${typeLabel}${isConsign?' '+consignLabel:''}</span>
+      <span class="${typeClass}">${typeLabel}${isOut?' '+channelLabel:''}</span>
       <span class="log-name">${p.name}</span>
       <span class="${isAdj2?'':(isOut?'log-amount-out':'log-amount-in')}">${isAdj2?'':yen(amount)}</span>
     </div>
