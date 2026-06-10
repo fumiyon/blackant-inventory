@@ -1511,7 +1511,7 @@ function renderProds() {
   const prev=catSel.value;
   catSel.innerHTML='<option value="">全カテゴリ</option>'+cats.map(c=>`<option>${c}</option>`).join('');
   catSel.value=prev;
-  document.getElementById('catDL').innerHTML=cats.map(c=>`<option value="${c}">`).join('');
+  // catDL removed
 
   let list=db.products.filter(p=>{
     const mq=!q||p.name.toLowerCase().includes(q)||p.cat.toLowerCase().includes(q);
