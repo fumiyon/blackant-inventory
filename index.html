@@ -555,7 +555,11 @@ input[type="date"],input[type="month"]{color-scheme:light;}
               </div>
             </div>
             <div class="form-grid">
-              <div class="field span2"><label>商品</label><select id="outProd" onchange="onOutProdChange()"></select></div>
+              <div class="field span2">
+                <label>商品</label>
+                <input type="text" id="outSearch" placeholder="商品名で検索…" oninput="filterOutProd()" style="margin-bottom:6px;">
+                <select id="outProd" onchange="onOutProdChange()" size="1"></select>
+              </div>
               <div class="field"><label>サイズ</label><select id="outSz" onchange="onOutVariantChange()"></select></div>
               <div class="field"><label>カラー</label><select id="outCl" onchange="onOutVariantChange()"></select></div>
               <div class="field"><label>販売種別</label>
@@ -592,7 +596,11 @@ input[type="date"],input[type="month"]{color-scheme:light;}
               </div>
             </div>
             <div class="form-grid">
-              <div class="field span2"><label>商品</label><select id="inProd" onchange="onInProdChange()"></select></div>
+              <div class="field span2">
+                <label>商品</label>
+                <input type="text" id="inSearch" placeholder="商品名で検索…" oninput="filterInProd()" style="margin-bottom:6px;">
+                <select id="inProd" onchange="onInProdChange()" size="1"></select>
+              </div>
               <div class="field"><label>サイズ</label><select id="inSz" onchange="onInVariantChange()"></select></div>
               <div class="field"><label>カラー</label><select id="inCl" onchange="onInVariantChange()"></select></div>
               <div class="field"><label>数量</label><input type="number" id="inQty" min="1" value="1"></div>
@@ -605,7 +613,11 @@ input[type="date"],input[type="month"]{color-scheme:light;}
           <!-- 在庫調整 -->
           <div class="form-tab-panel" id="panAdj">
             <div class="form-grid">
-              <div class="field span2"><label>商品</label><select id="adjProd" onchange="onAdjProdChange()"></select></div>
+              <div class="field span2">
+                <label>商品</label>
+                <input type="text" id="adjSearch" placeholder="商品名で検索…" oninput="filterAdjProd()" style="margin-bottom:6px;">
+                <select id="adjProd" onchange="onAdjProdChange()" size="1"></select>
+              </div>
               <div class="field"><label>サイズ</label><select id="adjSz" onchange="onAdjVariantChange()"></select></div>
               <div class="field"><label>カラー</label><select id="adjCl" onchange="onAdjVariantChange()"></select></div>
               <div class="field span2">
@@ -1136,6 +1148,39 @@ async function resetToDefault() {
   renderAll();
 }
 
+
+/* ━━ 出入庫フォーム 商品検索 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+function filterOutProd() {
+  const q = (document.getElementById('outSearch').value||'').toLowerCase();
+  const sel = document.getElementById('outProd');
+  const cur = sel.value;
+  const hasStock = db.products.filter(p => totalStock(p) > 0);
+  const filtered = q ? hasStock.filter(p => p.name.toLowerCase().includes(q) || p.cat.toLowerCase().includes(q)) : hasStock;
+  sel.innerHTML = filtered.map(p => `<option value="${p.id}">${p.name}（${p.cat}）</option>`).join('');
+  if(cur && filtered.find(p => p.id === parseInt(cur))) sel.value = cur;
+  onOutProdChange();
+}
+
+function filterInProd() {
+  const q = (document.getElementById('inSearch').value||'').toLowerCase();
+  const sel = document.getElementById('inProd');
+  const cur = sel.value;
+  const filtered = q ? db.products.filter(p => p.name.toLowerCase().includes(q) || p.cat.toLowerCase().includes(q)) : db.products;
+  sel.innerHTML = filtered.map(p => `<option value="${p.id}">${p.name}（${p.cat}）</option>`).join('');
+  if(cur && filtered.find(p => p.id === parseInt(cur))) sel.value = cur;
+  onInProdChange();
+}
+
+function filterAdjProd() {
+  const q = (document.getElementById('adjSearch').value||'').toLowerCase();
+  const sel = document.getElementById('adjProd');
+  const cur = sel.value;
+  const filtered = q ? db.products.filter(p => p.name.toLowerCase().includes(q) || p.cat.toLowerCase().includes(q)) : db.products;
+  sel.innerHTML = filtered.map(p => `<option value="${p.id}">${p.name}（${p.cat}）</option>`).join('');
+  if(cur && filtered.find(p => p.id === parseInt(cur))) sel.value = cur;
+  onAdjProdChange();
+}
+
 /* ━━ 在庫調整 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
 
 function onPCatChange(){
@@ -1273,23 +1318,11 @@ function logHTML(l, showDel=false) {
 
 /* ━━ DAILY ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
 function fillProdSelects() {
-  // 出庫：在庫ありのみ
-  const outSel = document.getElementById('outProd'); 
-  if(outSel){
-    const cur=outSel.value;
-    const hasStock = db.products.filter(p=>totalStock(p)>0);
-    outSel.innerHTML = hasStock.map(p=>`<option value="${p.id}">${p.name}（${p.cat}）</option>`).join('');
-    if(cur && hasStock.find(p=>p.id===parseInt(cur))) outSel.value=cur;
-  }
-  // 入庫：全商品
-  const inSel = document.getElementById('inProd');
-  if(inSel){
-    const cur=inSel.value;
-    inSel.innerHTML=db.products.map(p=>`<option value="${p.id}">${p.name}（${p.cat}）</option>`).join('');
-    if(cur) inSel.value=cur;
-  }
-  onOutProdChange();
-  onInProdChange();
+  // 検索欄が空の場合のみ全件表示（検索中はfilter関数に任せる）
+  const outSearch = document.getElementById('outSearch');
+  const inSearch  = document.getElementById('inSearch');
+  if(!outSearch?.value) filterOutProd();
+  if(!inSearch?.value)  filterInProd();
 }
 
 function fillVariants(prodSel,szSel,clSel) {
@@ -1750,14 +1783,21 @@ function renderReport() {
   const consignNet   = consignOuts.reduce((a,l)=>a+l.qty*l.price,0);
   const consignFee   = consignSales - consignNet;
 
-  const storeQty   = outs.filter(l=>!l.saleType||l.saleType==='store'||l.saleType==='normal').reduce((a,l)=>a+l.qty,0);
-  const onlineQty  = outs.filter(l=>l.saleType==='online').reduce((a,l)=>a+l.qty,0);
+  const storeOuts  = outs.filter(l=>!l.saleType||l.saleType==='store'||l.saleType==='normal');
+  const onlineOuts = outs.filter(l=>l.saleType==='online');
+  const storeQty   = storeOuts.reduce((a,l)=>a+l.qty,0);
+  const onlineQty  = onlineOuts.reduce((a,l)=>a+l.qty,0);
+  const storeSales  = storeOuts.reduce((a,l)=>a+l.qty*l.price,0);
+  const onlineSales = onlineOuts.reduce((a,l)=>a+l.qty*l.price,0);
+  const storeProfit  = storeOuts.reduce((a,l)=>a+l.qty*(l.price-l.cost),0);
+  const onlineProfit = onlineOuts.reduce((a,l)=>a+l.qty*(l.price-l.cost),0);
   const consignQty = consignOuts.reduce((a,l)=>a+l.qty,0);
+
   document.getElementById('repKpi').innerHTML=`
     <div class="kpi"><div class="kpi-label">総売上（実収）</div><div class="kpi-val c-gold">${yen(totSales)}</div><div class="kpi-sub">粗利率 ${pct(totProfit,totSales)}</div></div>
-    <div class="kpi"><div class="kpi-label">粗利</div><div class="kpi-val ${totProfit>=0?'c-green':'c-red'}">${yen(totProfit)}</div><div class="kpi-sub">${totQty}点販売</div></div>
-    <div class="kpi"><div class="kpi-label">店舗 / オンライン</div><div class="kpi-val">${storeQty}<span style="font-size:14px;color:#a8a49e;"> / </span>${onlineQty}</div><div class="kpi-sub">点</div></div>
-    <div class="kpi"><div class="kpi-label">委託手数料（30%）</div><div class="kpi-val c-red">${yen(consignFee)}</div><div class="kpi-sub">委託 ${consignQty}点</div></div>
+    <div class="kpi"><div class="kpi-label">総粗利</div><div class="kpi-val ${totProfit>=0?'c-green':'c-red'}">${yen(totProfit)}</div><div class="kpi-sub">${totQty}点販売</div></div>
+    <div class="kpi"><div class="kpi-label">店舗 売上 / 粗利</div><div class="kpi-val">${yen(storeSales)}</div><div class="kpi-sub">${storeQty}点　粗利 ${yen(storeProfit)}</div></div>
+    <div class="kpi"><div class="kpi-label">オンライン 売上 / 粗利</div><div class="kpi-val">${yen(onlineSales)}</div><div class="kpi-sub">${onlineQty}点　粗利 ${yen(onlineProfit)}</div></div>
   `;
 
   const EMPTY='<div style="padding:20px;text-align:center;color:var(--dust);font-size:11px;">データなし</div>';
