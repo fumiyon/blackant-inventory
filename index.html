@@ -698,10 +698,11 @@ input[type="date"],input[type="month"]{color-scheme:light;}
   <div class="ph">
     <div class="ph-left">
       <h2>売上・利益レポート</h2>
-      <div class="ph-sub">出庫記録から自動集計</div>
+      <div class="ph-sub" id="repScope">出庫記録から自動集計</div>
     </div>
     <div class="ph-right">
-      <input type="month" id="repMonth" onchange="renderReport()" style="width:100%;max-width:150px;">
+      <input type="month" id="repMonth" onchange="onRepMonthChange()" style="width:100%;max-width:150px;">
+      <button class="btn btn-outline btn-sm" id="btnAllPeriod" onclick="toggleAllPeriod()">全期間</button>
       <button class="btn btn-outline btn-sm" onclick="exportRepCSV()">CSV 出力</button>
     </div>
   </div>
@@ -716,6 +717,17 @@ input[type="date"],input[type="month"]{color-scheme:light;}
         <div class="card-head"><h3>日別 売上・利益</h3></div>
         <div id="repDaily" style="max-height:320px;overflow-y:auto;"></div>
       </div>
+    </div>
+    <div class="card">
+      <div class="card-head"><h3>累計（全期間）</h3></div>
+      <div id="repAllTime"></div>
+    </div>
+    <div class="card">
+      <div class="card-head">
+        <h3>商品別 累計販売数</h3>
+        <input type="text" id="atSearch" placeholder="商品名で検索…" oninput="renderAllTimeProds()" style="max-width:180px;font-size:11px;padding:6px 10px;">
+      </div>
+      <div id="repAllTimeProds" style="max-height:420px;overflow-y:auto;"></div>
     </div>
     <div class="card">
       <div class="card-head"><h3>チャネル別 売上・利益</h3></div>
@@ -1773,8 +1785,82 @@ function removePhoto(e) {
 }
 
 /* ━━ REPORT ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+
+/* ━━ 商品別 累計販売数 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+function renderAllTimeProds() {
+  const el = document.getElementById('repAllTimeProds');
+  if(!el) return;
+  const q = (document.getElementById('atSearch')?.value||'').toLowerCase();
+
+  // 商品ごとに累計集計
+  const agg = {};
+  db.logs.filter(l=>l.type==='out').forEach(l=>{
+    if(!agg[l.pid]) agg[l.pid] = {qty:0, sales:0, profit:0, store:0, online:0, consign:0, provide:0};
+    const a = agg[l.pid];
+    a.qty    += l.qty;
+    a.sales  += l.qty*l.price;
+    a.profit += l.qty*(l.price-l.cost);
+    const t = l.saleType||'store';
+    if(t==='online') a.online += l.qty;
+    else if(t==='consign'||t==='consign20') a.consign += l.qty;
+    else if(t==='provide') a.provide += l.qty;
+    else a.store += l.qty;
+  });
+
+  let list = Object.entries(agg)
+    .map(([id,v]) => ({p: gp(parseInt(id)), v}))
+    .filter(x => x.p)
+    .filter(x => !q || x.p.name.toLowerCase().includes(q) || x.p.cat.toLowerCase().includes(q))
+    .sort((a,b) => b.v.qty - a.v.qty);
+
+  if(!list.length){
+    el.innerHTML = '<div style="padding:20px;text-align:center;color:#a8a49e;font-size:11px;">販売記録なし</div>';
+    return;
+  }
+
+  el.innerHTML = list.map((x,i) => {
+    const p = x.p, v = x.v;
+    const inStock = totalStock(p);
+    return `<div class="rep-row">
+      <span class="rep-rank ${i<3?'top':''}">${i+1}</span>
+      <span class="rep-name" title="${p.name}">${p.name}</span>
+      <span class="rep-meta">在庫 ${inStock}</span>
+      <span class="rep-profit ${v.profit>=0?'pos':'neg'}">粗利 ${yen(v.profit)}</span>
+      <span class="rep-sales" style="font-size:13px;font-weight:500;">${v.qty}点</span>
+    </div>`;
+  }).join('');
+}
+
+
+/* ━━ 全期間 / 月別 切替 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+let repAllPeriod = false;
+
+function toggleAllPeriod() {
+  repAllPeriod = !repAllPeriod;
+  const btn = document.getElementById('btnAllPeriod');
+  const mEl = document.getElementById('repMonth');
+  if(repAllPeriod){
+    btn.className = 'btn btn-gold btn-sm';
+    btn.textContent = '全期間 ✓';
+    mEl.disabled = true;
+    mEl.style.opacity = '.4';
+  } else {
+    btn.className = 'btn btn-outline btn-sm';
+    btn.textContent = '全期間';
+    mEl.disabled = false;
+    mEl.style.opacity = '1';
+    if(!mEl.value) mEl.value = todayStr().slice(0,7);
+  }
+  renderReport();
+}
+
+function onRepMonthChange() {
+  if(repAllPeriod) return;
+  renderReport();
+}
+
 function renderReport() {
-  const month=document.getElementById('repMonth').value;
+  const month = repAllPeriod ? '' : document.getElementById('repMonth').value;
   const outs=db.logs.filter(l=>l.type==='out'&&(!month||l.date.startsWith(month)));
   const totSales =outs.reduce((a,l)=>a+l.qty*l.price,0);
   const totCost  =outs.reduce((a,l)=>a+l.qty*l.cost,0);
@@ -1828,6 +1914,7 @@ function renderReport() {
       <span class="rep-rank ${i<3?'top':''}">${i+1}</span>
       <span class="rep-name">${p.name}</span>
       <span class="rep-meta">${v.qty}点</span>
+      <span class="rep-meta" style="color:#a8a49e;">累計${db.logs.filter(x=>x.type==='out'&&x.pid===parseInt(id)).reduce((a,x)=>a+x.qty,0)}</span>
       <span class="rep-profit ${v.profit>=0?'pos':'neg'}">粗利 ${yen(v.profit)}</span>
       <span class="rep-sales">${yen(v.sales)}</span>
     </div>`;
@@ -1883,6 +1970,35 @@ function renderReport() {
     </div>`;
   }).join('');
 
+  // ── 累計（全期間・月フィルタ無視） ──
+  const allOuts = db.logs.filter(l=>l.type==='out');
+  const atQty    = allOuts.reduce((a,l)=>a+l.qty,0);
+  const atSales  = allOuts.reduce((a,l)=>a+l.qty*l.price,0);
+  const atCost   = allOuts.reduce((a,l)=>a+l.qty*l.cost,0);
+  const atProfit = atSales-atCost;
+  const atStore   = allOuts.filter(l=>!l.saleType||l.saleType==='store'||l.saleType==='normal').reduce((a,l)=>a+l.qty,0);
+  const atOnline  = allOuts.filter(l=>l.saleType==='online').reduce((a,l)=>a+l.qty,0);
+  const atConsign = allOuts.filter(l=>l.saleType==='consign'||l.saleType==='consign20').reduce((a,l)=>a+l.qty,0);
+  const atProvide = allOuts.filter(l=>l.saleType==='provide').reduce((a,l)=>a+l.qty,0);
+  const atDates   = [...new Set(allOuts.map(l=>l.date))].sort();
+  const atSpan    = atDates.length ? `${atDates[0]} 〜 ${atDates[atDates.length-1]}` : 'データなし';
+
+  const atEl = document.getElementById('repAllTime');
+  if(atEl){
+    atEl.innerHTML = `
+      <div class="rep-row"><span class="rep-name" style="font-weight:400;">累計 販売点数</span><span class="rep-sales" style="font-size:14px;">${atQty}点</span></div>
+      <div class="rep-row"><span class="rep-name">累計 売上（実収）</span><span class="rep-sales">${yen(atSales)}</span></div>
+      <div class="rep-row"><span class="rep-name">累計 粗利</span><span class="rep-profit ${atProfit>=0?'pos':'neg'}">${yen(atProfit)}</span><span class="rep-meta">${pct(atProfit,atSales)}</span></div>
+      <div class="rep-row"><span class="rep-name">内訳</span><span class="rep-meta">店舗 ${atStore}</span><span class="rep-meta">オンライン ${atOnline}</span><span class="rep-meta">委託 ${atConsign}</span><span class="rep-meta">提供 ${atProvide}</span></div>
+      <div class="rep-row"><span class="rep-name" style="color:#a8a49e;font-size:10px;">集計期間</span><span class="rep-meta">${atSpan}</span></div>
+    `;
+  }
+
+  const scopeEl = document.getElementById('repScope');
+  if(scopeEl) scopeEl.textContent = repAllPeriod ? '全期間の集計' : (month ? month.replace('-','年')+'月の集計' : '全期間の集計');
+
+  renderAllTimeProds();
+
   // カテゴリ
   const byC={};
   outs.forEach(l=>{const p=gp(l.pid);if(!p)return;if(!byC[p.cat])byC[p.cat]={qty:0,sales:0,profit:0};byC[p.cat].qty+=l.qty;byC[p.cat].sales+=l.qty*l.price;byC[p.cat].profit+=l.qty*(l.price-l.cost);});
@@ -1898,7 +2014,7 @@ function renderReport() {
 }
 
 function exportRepCSV() {
-  const month=document.getElementById('repMonth').value;
+  const month = repAllPeriod ? '' : document.getElementById('repMonth').value;
   const outs=db.logs.filter(l=>l.type==='out'&&(!month||l.date.startsWith(month)));
   const rows=[['日付','商品名','カテゴリ','サイズ','カラー','数量','販売単価','売上','原価','粗利']];
   outs.forEach(l=>{
