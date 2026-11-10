@@ -1257,11 +1257,19 @@ function renderDash() {
   const qty    = outs.reduce((a,l)=>a+l.qty,0);
   const alerts = db.products.filter(p=>stockStatus(p)!=='ok');
 
+  // チャネル別（本日）
+  const dStore   = outs.filter(l=>!l.saleType||l.saleType==='store'||l.saleType==='normal');
+  const dOnline  = outs.filter(l=>l.saleType==='online');
+  const dConsign = outs.filter(l=>l.saleType==='consign'||l.saleType==='consign20');
+  const sum = a => a.reduce((x,l)=>x+l.qty*l.price,0);
+  const cnt = a => a.reduce((x,l)=>x+l.qty,0);
+  const prf = a => a.reduce((x,l)=>x+l.qty*(l.price-l.cost),0);
+
   document.getElementById('kpiGrid').innerHTML = `
-    <div class="kpi"><div class="kpi-label">本日 売上</div><div class="kpi-val c-gold">${yen(sales)}</div><div class="kpi-sub">${outs.length}件</div></div>
-    <div class="kpi"><div class="kpi-label">本日 粗利</div><div class="kpi-val ${profit>=0?'c-green':'c-red'}">${yen(profit)}</div><div class="kpi-sub">粗利率 ${pct(profit,sales)}</div></div>
-    <div class="kpi"><div class="kpi-label">本日 販売数</div><div class="kpi-val">${qty}</div><div class="kpi-sub">点</div></div>
-    <div class="kpi"><div class="kpi-label">在庫アラート</div><div class="kpi-val ${alerts.length>0?'c-red':''}">${alerts.length}</div><div class="kpi-sub">/ ${db.products.length}商品</div></div>
+    <div class="kpi"><div class="kpi-label">本日 店舗 売上</div><div class="kpi-val c-gold">${yen(sum(dStore))}</div><div class="kpi-sub">${cnt(dStore)}点　粗利 ${yen(prf(dStore))}</div></div>
+    <div class="kpi"><div class="kpi-label">本日 オンライン 売上</div><div class="kpi-val c-gold">${yen(sum(dOnline))}</div><div class="kpi-sub">${cnt(dOnline)}点　粗利 ${yen(prf(dOnline))}</div></div>
+    <div class="kpi"><div class="kpi-label">本日 合計 売上</div><div class="kpi-val">${yen(sales)}</div><div class="kpi-sub">${qty}点　粗利 ${yen(profit)}（${pct(profit,sales)}）</div></div>
+    <div class="kpi"><div class="kpi-label">本日 委託 / 在庫アラート</div><div class="kpi-val ${alerts.length>0?'c-red':''}">${alerts.length}</div><div class="kpi-sub">委託 ${yen(sum(dConsign))}（${cnt(dConsign)}点）</div></div>
   `;
 
   // bar chart
